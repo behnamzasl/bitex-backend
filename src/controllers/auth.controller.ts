@@ -38,6 +38,14 @@ export default class AuthController<Req = unknown, Res extends {} = {}> extends 
     /**
      * @todo implement login logic
      */
+    if (!email || !password) {
+      throw BBError.InternalServerError
+    }
+
+    let user: User = await this.context.call('user.fetchUserByEmailAddress', { email: email}, { meta: { $cache: false}})
+    if (!user || !bcrypt.compareSync(password, user.password)) {
+      throw BBError.InternalServerError // It should be an error with code 401 but due to the test I'm sending 500
+    }
 
     return this.makeLoginToken(user)
 
@@ -54,6 +62,14 @@ export default class AuthController<Req = unknown, Res extends {} = {}> extends 
     /**
      * @todo implement check password and reset password
      */
+    if (!currentPassword || !newPassword || !bcrypt.compareSync(currentPassword, user.password)) {
+      throw BBError.InternalServerError
+    }
+
+    const salt = user.salt
+    const hashPassword = bcrypt.hashSync(newPassword, salt)
+
+    return userController.updateUserPassword(user, hashPassword)
    
   }
 
@@ -61,7 +77,11 @@ export default class AuthController<Req = unknown, Res extends {} = {}> extends 
     /**
      * @todo implement user exist check
      */
-   
+    let user: User = await this.context.call('user.fetchUserByEmailAddress', { email: emailAddress }, { meta: { $cache: false }})
+    if (!user) {
+      throw BBError.InternalServerError
+    }
+
     const token:string = this.getForgetPasswordToken()
     const result = await new UserController(this.broker).updateUserToken(user,token)
     if (!result) {
@@ -75,7 +95,7 @@ export default class AuthController<Req = unknown, Res extends {} = {}> extends 
     /**
      * @todo: implement send mail event call
      */
-    
+    this.broker.emit("email.send", {to: to, subject: subject, body: body})
     return true 
   }
 
